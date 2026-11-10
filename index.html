@@ -713,8 +713,8 @@ function renderDay(){
     if(piqs.length)h+='<h3 class="sec">Piquet</h3><div class="list" style="margin-top:8px">'+piqs.map(rowH).join('')+'</div>';
   }
   if(dd.forfait&&dd.lieu)h+=`<div class="forfait"><b>Forfait journalier</b><span>${esc(dd.lieu)}</span></div>`;
-  const last=db.settings.lastBackup,sn=db.settings.backupSnooze||0,stale=db.entries.length>0&&(!last||(Date.now()-last)>7*864e5)&&Date.now()>sn;
-  if(stale)h+=`<div class="note col"><span><b>${last?'Ça fait plus d\'une semaine.':'Tes heures ne sont pas encore sauvegardées.'}</b><br><small>Une sauvegarde prend dix secondes.</small></span><div class="chips"><button class="btn primary" data-a="backup" style="min-height:48px;padding:0 20px">Sauvegarder mes heures</button><button class="link" data-a="bsnooze">Plus tard</button></div></div>`;
+  const last=db.settings.lastBackup,sn=db.settings.backupSnooze||0,nw=new Date(),stale=db.entries.length>0&&nw.getDay()===5&&nw.getHours()>=12&&(!last||(Date.now()-last)>2*864e5)&&Date.now()>sn;
+  if(stale)h+=`<div class="note col"><span><b>C\'est vendredi, pense à sauvegarder tes heures.</b><br><small>Une sauvegarde prend dix secondes.</small></span><div class="chips"><button class="btn primary" data-a="backup" style="min-height:48px;padding:0 20px">Sauvegarder mes heures</button><button class="link" data-a="bsnooze">Plus tard</button></div></div>`;
   $('#app').innerHTML=h;
   $('#pick').onchange=e=>{if(e.target.value){cur=e.target.value;render()}};
   $('#actions').innerHTML=closed
@@ -1014,12 +1014,7 @@ function openFinish(){
 }
 function confirmFinish(){
   db.days[cur]=Object.assign(db.days[cur]||{},{closed:true});
-  save();
-  const t=totals(dayEntries(cur));
-  $('#sheet').innerHTML=`<div class="grab"></div><div class="sbody"><div class="done"><div class="ring">${I.check}</div><h2 style="margin:0 0 6px">Journée terminée</h2>
-    <p>${fmt(t.work)} de présence enregistrées sur cet appareil.</p></div></div>
-    <div class="sfoot"><button class="btn second" data-a="close">Fermer</button><button class="btn primary" data-a="backup">Sauvegarder</button></div>`;
-  render();
+  save();closeSheet();render();toast('Journée terminée');
 }
 
 /* copier une journée */
