@@ -604,6 +604,13 @@ function missingList(){
   for(let i=1;i<=10;i++){const d=new Date(now.getFullYear(),now.getMonth(),now.getDate()-i);const k=ymd(d);if(k!==cur&&isMissing(k))out.push(k)}
   return out.reverse();
 }
+const isInstalled=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone;
+try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
+function installHTML(){
+  if(isInstalled())return '';
+  const sn=db.settings.installSnooze;if(sn&&Date.now()<sn)return '';
+  return `<div class="note col"><span><b>Installe l'app pour protéger tes heures</b><br><small>Sans installation, ton téléphone peut effacer tes données au bout de quelques jours.</small></span><div class="chips"><button class="btn primary" data-a="install" style="min-height:48px;padding:0 20px">Installer</button><button class="link" data-a="snooze">Plus tard</button></div></div>`;
+}
 function missingHTML(){
   const L=missingList();if(!L.length)return '';
   const yest=ymd(new Date(Date.now()-864e5));
@@ -673,7 +680,7 @@ function renderDay(){
         <input type="date" id="pick" value="${cur}" aria-label="Choisir une date" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer"></div>
       <button class="nav" data-a="next" aria-label="Jour suivant">›</button></div>
     <button class="pod" data-a="settings" aria-label="Réglages">${I.set}</button></div>`;
-  if(!closed)h+=missingHTML();
+  h+=installHTML();if(!closed)h+=missingHTML();
   const sub=`<div class="sub"><div>Pause <b>${fmt(t.pause)}</b></div>${t.abs?`<div>Absence <b>${fmt(t.abs)}</b></div>`:''}<div>Mandats <b>${Object.keys(t.by).length}</b></div>${t.piq?`<div>Piquet <b>${fmt(t.piq)}</b></div>`:''}</div>`;
   const badge=closed?`<div class="badge">${I.check.replace('<svg','<svg width="18" height="18"')} Journée terminée${dd.forfait?' · forfait':''}</div>`:'';
   if(dark){
@@ -1163,6 +1170,7 @@ document.addEventListener('click',e=>{
     case 'tpl':openDay(cur,null,{tpl:true});break;
     case 'tplfill':tplFill();D.tab='matin';drawDay();break;
     case 'copyday':openCopy();break;
+    case 'snooze':{db.settings.installSnooze=Date.now()+864e5;save();render();break}
     case 'skipmiss':{(t.dataset.k2||'').split(',').filter(Boolean).forEach(k=>{db.days[k]=Object.assign(db.days[k]||{},{skip:true})});save();render();toast('Jours ignorés');break}
     case 'recap':openRecap();break;
     case 'recapshare':shareOrDownload(`suivi-heures_${month.getFullYear()}-${pad(month.getMonth()+1)}.txt`,'text/plain',window._recap);break;
