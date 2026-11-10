@@ -713,8 +713,8 @@ function renderDay(){
     if(piqs.length)h+='<h3 class="sec">Piquet</h3><div class="list" style="margin-top:8px">'+piqs.map(rowH).join('')+'</div>';
   }
   if(dd.forfait&&dd.lieu)h+=`<div class="forfait"><b>Forfait journalier</b><span>${esc(dd.lieu)}</span></div>`;
-  const last=db.settings.lastBackup,stale=db.entries.length>0&&(!last||(Date.now()-last)>14*864e5);
-  if(stale)h+=`<div class="note"><span>Pense à sauvegarder une copie de tes heures.</span><button data-a="backup">Sauvegarder</button></div>`;
+  const last=db.settings.lastBackup,sn=db.settings.backupSnooze||0,stale=db.entries.length>0&&(!last||(Date.now()-last)>7*864e5)&&Date.now()>sn;
+  if(stale)h+=`<div class="note col"><span><b>${last?'Ça fait plus d\'une semaine.':'Tes heures ne sont pas encore sauvegardées.'}</b><br><small>Une sauvegarde prend dix secondes.</small></span><div class="chips"><button class="btn primary" data-a="backup" style="min-height:48px;padding:0 20px">Sauvegarder mes heures</button><button class="link" data-a="bsnooze">Plus tard</button></div></div>`;
   $('#app').innerHTML=h;
   $('#pick').onchange=e=>{if(e.target.value){cur=e.target.value;render()}};
   $('#actions').innerHTML=closed
@@ -780,10 +780,11 @@ function renderSettings(){
     <button class="tile" data-t="fullday"><span>Durée</span><b>${toHHMM(s.fullDay)}</b></button></div>
   <div class="card"><h4>Journée type</h4><p>Les heures remplies par le bouton « Journée type » et proposées sur le clavier.</p>
     <div class="times">${[['m1','Matin · début'],['m2','Matin · fin'],['a1','Après-midi · début'],['a2','Après-midi · fin']].map(([k,l])=>`<button class="tile" data-t="tpl:${k}"><span>${l}</span><b>${s.tpl[k]}</b></button>`).join('')}</div></div>
-  <div class="card"><h4>Sauvegarde</h4><p>Tes heures restent uniquement sur cet appareil. Dernière copie : ${last}.</p>
-    <button class="btn line" data-a="restore">Restaurer une copie</button>
+  <div class="card"><h4>Sauvegarde</h4><p>Tes heures restent sur cet appareil. Sauvegarde-les dans un fichier que tu gardes dans Fichiers ou que tu t'envoies par e-mail ou WhatsApp. Dernière sauvegarde : ${last}.</p>
+    <button class="btn primary" data-a="backup" style="width:100%">Sauvegarder mes heures</button>
+    <button class="btn line" data-a="restore">Retrouver mes heures</button>
     <button class="btn line" data-a="csv">Exporter en tableau (CSV)</button>
-    <input type="file" id="file" accept=".json,application/json" hidden></div>
+    <input type="file" id="file" hidden></div>
   ${standalone?'':`<div class="card"><h4>Installer sur l'écran d'accueil</h4><p>Touche le bouton ci-dessous. Sur Android, l'installation se lance directement. Sur iPhone et iPad, Apple impose un dernier geste : choisis « Sur l'écran d'accueil » dans le menu qui s'ouvre. L'app marche ensuite sans réseau.</p><button class="btn primary" data-a="install" style="width:100%;margin-top:12px">Installer l'app</button></div>`}
   <div class="card"><h4>Effacer</h4><p>Supprime toutes les heures de cet appareil. Fais une copie avant.</p>
     <button class="btn quiet" data-a="wipe">Effacer toutes les données</button></div>`;
@@ -1090,10 +1091,27 @@ async function shareOrDownload(name,mime,content){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(a.href),4000);return true;
 }
+function b64enc(str){const by=new TextEncoder().encode(str);let b='';by.forEach(x=>b+=String.fromCharCode(x));return btoa(b)}
+function b64dec(str){const b=atob(str);const by=Uint8Array.from(b,c=>c.charCodeAt(0));return new TextDecoder().decode(by)}
+function backupMd(){
+  const pf=db.settings.profile||{},who=[pf.prenom,pf.nom].filter(Boolean).join(' ');
+  const mois=[...new Set(db.entries.map(e=>e.date.slice(0,7)))].sort();
+  const out=[`# Mes heures, sauvegarde du ${dfmt(new Date(),{day:'numeric',month:'long',year:'numeric'})}`,''];
+  if(who)out.push(who,'');
+  out.push("Ce fichier vient de l'app Suivi des heures. Garde-le : dans l'app, le bouton « Retrouver mes heures » (Réglages) le relit et remet tes heures, par exemple après un changement de téléphone.",'');
+  out.push(`${db.entries.length} plages enregistrées.`,'');
+  for(const m of mois){const [y,mo]=m.split('-').map(Number);const t=recapText(y,mo-1);if(t){out.push('## '+cap(dfmt(new Date(y,mo-1,1),{month:'long',year:'numeric'})),'','```',t,'```','')}}
+  out.push("## Données de l'app","","Ne modifie pas ce qui suit : c'est ce que l'app relit pour restaurer tes heures.","");
+  out.push('<!--SUIVI-HEURES-DATA');
+  const d=b64enc(JSON.stringify({v:1,saved:new Date().toISOString(),...db}));
+  for(let i=0;i<d.length;i+=100)out.push(d.slice(i,i+100));
+  out.push('SUIVI-HEURES-DATA-->','');
+  return out.join('\n');
+}
 async function backup(){
-  const name=`suivi-heures_${ymd(new Date())}.json`;
-  const ok=await shareOrDownload(name,'application/json',JSON.stringify({v:1,saved:new Date().toISOString(),...db},null,1));
-  if(ok){db.settings.lastBackup=Date.now();save();toast('Copie créée');if(tab==='set')render()}
+  const name=`Mes heures ${pad(new Date().getDate())}.${pad(new Date().getMonth()+1)}.${new Date().getFullYear()}.md`;
+  const ok=await shareOrDownload(name,'text/markdown',backupMd());
+  if(ok){db.settings.lastBackup=Date.now();save();toast('Sauvegarde créée');if(tab==='set'||tab==='day')render()}
 }
 async function csv(){
   const rows=[['Date','Type','Début','Fin','Durée','Mandat ou absence','Forfait','Lieu']];
@@ -1107,10 +1125,13 @@ async function csv(){
 function restoreFile(ev){
   const f=ev.target.files[0];if(!f)return;
   const r=new FileReader();r.onload=()=>{
-    try{const d=JSON.parse(r.result);if(!d||!Array.isArray(d.entries))throw 0;
-      ask('Restaurer cette copie ?',`${d.entries.length} plages seront chargées et remplaceront les données de cet appareil.`,'Restaurer',()=>{
-        db={entries:d.entries,days:d.days||{},settings:Object.assign(db.settings,d.settings||{})};save();applyTheme();closeSheet();render();toast('Copie restaurée')});
-    }catch(e){toast("Ce fichier n'est pas une copie valide")}
+    try{let txt=String(r.result),d;
+      const m=txt.match(/<!--SUIVI-HEURES-DATA\s*([\s\S]*?)\s*SUIVI-HEURES-DATA-->/);
+      d=m?JSON.parse(b64dec(m[1].replace(/\s+/g,''))):JSON.parse(txt);
+      if(!d||!Array.isArray(d.entries))throw 0;
+      ask('Retrouver ces heures ?',`${d.entries.length} plages seront chargées et remplaceront les heures de cet appareil.`,'Retrouver',()=>{
+        db={entries:d.entries,days:d.days||{},settings:Object.assign(db.settings,d.settings||{})};save();applyTheme();closeSheet();render();toast('Heures retrouvées')});
+    }catch(e){toast("Ce fichier n'est pas une sauvegarde de l'app")}
   };r.readAsText(f);ev.target.value='';
 }
 
@@ -1170,6 +1191,7 @@ document.addEventListener('click',e=>{
     case 'tpl':openDay(cur,null,{tpl:true});break;
     case 'tplfill':tplFill();D.tab='matin';drawDay();break;
     case 'copyday':openCopy();break;
+    case 'bsnooze':{db.settings.backupSnooze=Date.now()+864e5;save();render();break}
     case 'snooze':{db.settings.installSnooze=Date.now()+864e5;save();render();break}
     case 'skipmiss':{(t.dataset.k2||'').split(',').filter(Boolean).forEach(k=>{db.days[k]=Object.assign(db.days[k]||{},{skip:true})});save();render();toast('Jours ignorés');break}
     case 'recap':openRecap();break;
