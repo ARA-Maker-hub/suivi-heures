@@ -519,6 +519,36 @@ pre.recap{white-space:pre-wrap;word-break:break-word;font:13px/1.5 ui-monospace,
 .toast{background:rgba(10,16,18,.86);color:#F2F7F6;border:1px solid rgba(255,255,255,.18);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px)}
 :root[data-th=light] .toast{background:rgba(23,18,14,.88)}
 .sw{box-shadow:inset 0 2px 4px rgba(0,0,0,.25)}
+
+/* ===== v15 : accueil, premier lancement, sauvegarde OneDrive ===== */
+.onb .dock{display:none!important}
+.top.hometop{align-items:flex-start;margin-bottom:14px}
+.hello{flex:1;min-width:0;padding:4px 2px 0}
+.hello h1{margin:0;font-size:30px;line-height:1.08;letter-spacing:-.03em;font-weight:700}
+.hello p{margin:8px 0 0;color:var(--muted);font-size:15.5px;line-height:1.45;max-width:32ch}
+.bn.hm .num{font-size:32px}
+.bn.hm .num span{font-size:15px}
+.cloudchip{display:inline-flex;align-items:center;gap:8px;margin-top:14px;padding:8px 14px;border-radius:999px;font-size:13.5px;font-weight:600;color:var(--muted);background:var(--surface);border:1px solid var(--line)}
+.cloudchip i{width:9px;height:9px;border-radius:50%;background:var(--ok);flex:none}
+.cloudchip[data-s=syncing] i,.cloudchip[data-s=pending] i{background:var(--pause)}
+.cloudchip[data-s=error] i,.cloudchip[data-s=reauth] i,.cloudchip[data-s=choice] i{background:var(--piq)}
+.cloudchip[data-s=off] i{background:var(--muted)}
+.card .cloudchip{margin:0 0 12px}
+.ver{margin:18px 0 0;text-align:center;color:var(--muted);font-size:12.5px}
+.ob{min-height:calc(100dvh - 70px);display:flex;flex-direction:column;justify-content:center;gap:16px;padding:8px 2px 28px}
+.ob h1{margin:0;font-size:36px;line-height:1.04;letter-spacing:-.035em;font-weight:700}
+.ob .lead{margin:0;font-size:17px;line-height:1.5;color:var(--muted);max-width:34ch}
+.ob ul{list-style:none;margin:4px 0 8px;padding:0;display:grid;gap:10px}
+.ob li{padding:14px 16px;border-radius:var(--r);background:var(--surface);border:1px solid var(--line);line-height:1.42;font-size:15px;color:var(--muted)}
+.ob li b{display:block;color:var(--text);font-size:16px;margin-bottom:2px}
+.ob .btn{width:100%;flex:none}
+.ob .link{align-self:center;color:var(--muted)}
+.ob .err{padding:12px 14px;border-radius:16px;background:color-mix(in srgb,var(--piq) 16%,transparent);font-size:14.5px;line-height:1.45}
+.ob label.f{margin-top:6px}
+.btn.ms svg{width:22px;height:22px;stroke:none;stroke-width:0}
+.btn[disabled]{opacity:.45;pointer-events:none}
+:root[data-fx=glass] .ob li{background:var(--g-bg);border:1px solid var(--g-bd);box-shadow:var(--g-sh);-webkit-backdrop-filter:blur(22px) saturate(170%);backdrop-filter:blur(22px) saturate(170%)}
+:root[data-fx=glass] .cloudchip{background:var(--g-bg);border:1px solid var(--g-bd);box-shadow:var(--g-sh)}
 </style>
 </head>
 <body>
@@ -563,10 +593,15 @@ db.settings=Object.assign({theme:'auto',fullDay:492,lastBackup:null},db.settings
 db.days=db.days||{};
 db.settings.profile=Object.assign({nom:'',prenom:'',division:''},db.settings.profile||{});
 db.settings.tpl=Object.assign({m1:'07:00',m2:'12:00',a1:'13:00',a2:'16:12'},db.settings.tpl||{});
+db.meta=Object.assign({modified:0,synced:0,etag:''},db.meta||{});
 for(const e of db.entries)if(!e.blk)e.blk=e.type==='pause'?'pause':e.type==='abs'?'abs':(toMin(e.start)<720?'matin':'apres');
-function save(){
+function persist(){
   mem=db;
   try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){toast("Enregistrement impossible sur cet appareil")}
+}
+function save(){
+  db.meta=Object.assign({modified:0,synced:0,etag:''},db.meta||{});db.meta.modified=Date.now();
+  persist();if(window.cloudChanged)cloudChanged();
 }
 const dur=e=>e.type==='abs'?e.dur:span(e.start,e.end);
 const dayEntries=d=>db.entries.filter(e=>e.date===d).sort((a,b)=>(a.type==='abs')-(b.type==='abs')||toMin(a.start||'23:59')-toMin(b.start||'23:59'));
@@ -620,7 +655,7 @@ function missingHTML(){
 }
 
 /* ---------- état de l'interface ---------- */
-let tab='day', cur=ymd(new Date()), month=new Date(); month.setDate(1);
+let tab='home', cur=ymd(new Date()), month=new Date(); month.setDate(1);
 
 /* ---------- icônes ---------- */
 const I={
@@ -680,7 +715,7 @@ function renderDay(){
         <input type="date" id="pick" value="${cur}" aria-label="Choisir une date" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer"></div>
       <button class="nav" data-a="next" aria-label="Jour suivant">›</button></div>
     <button class="pod" data-a="settings" aria-label="Réglages">${I.set}</button></div>`;
-  h+=installHTML();if(!closed)h+=missingHTML();
+  if(!closed)h+=missingHTML();
   const sub=`<div class="sub"><div>Pause <b>${fmt(t.pause)}</b></div>${t.abs?`<div>Absence <b>${fmt(t.abs)}</b></div>`:''}<div>Mandats <b>${Object.keys(t.by).length}</b></div>${t.piq?`<div>Piquet <b>${fmt(t.piq)}</b></div>`:''}</div>`;
   const badge=closed?`<div class="badge">${I.check.replace('<svg','<svg width="18" height="18"')} Journée terminée${dd.forfait?' · forfait':''}</div>`:'';
   if(dark){
@@ -713,7 +748,7 @@ function renderDay(){
     if(piqs.length)h+='<h3 class="sec">Piquet</h3><div class="list" style="margin-top:8px">'+piqs.map(rowH).join('')+'</div>';
   }
   if(dd.forfait&&dd.lieu)h+=`<div class="forfait"><b>Forfait journalier</b><span>${esc(dd.lieu)}</span></div>`;
-  const last=db.settings.lastBackup,sn=db.settings.backupSnooze||0,nw=new Date(),stale=db.entries.length>0&&nw.getDay()===5&&nw.getHours()>=12&&(!last||(Date.now()-last)>2*864e5)&&Date.now()>sn;
+  const last=db.settings.lastBackup,sn=db.settings.backupSnooze||0,nw=new Date(),stale=!cloudOn()&&db.entries.length>0&&nw.getDay()===5&&nw.getHours()>=12&&(!last||(Date.now()-last)>2*864e5)&&Date.now()>sn;
   if(stale)h+=`<div class="note col"><span><b>C\'est vendredi, pense à sauvegarder tes heures.</b><br><small>Une sauvegarde prend dix secondes.</small></span><div class="chips"><button class="btn primary" data-a="backup" style="min-height:48px;padding:0 20px">Sauvegarder mes heures</button><button class="link" data-a="bsnooze">Plus tard</button></div></div>`;
   $('#app').innerHTML=h;
   $('#pick').onchange=e=>{if(e.target.value){cur=e.target.value;render()}};
@@ -780,26 +815,28 @@ function renderSettings(){
     <button class="tile" data-t="fullday"><span>Durée</span><b>${toHHMM(s.fullDay)}</b></button></div>
   <div class="card"><h4>Journée type</h4><p>Les heures remplies par le bouton « Journée type » et proposées sur le clavier.</p>
     <div class="times">${[['m1','Matin · début'],['m2','Matin · fin'],['a1','Après-midi · début'],['a2','Après-midi · fin']].map(([k,l])=>`<button class="tile" data-t="tpl:${k}"><span>${l}</span><b>${s.tpl[k]}</b></button>`).join('')}</div></div>
-  <div class="card"><h4>Sauvegarde</h4><p>Tes heures restent sur cet appareil. Sauvegarde-les dans un fichier que tu gardes dans Fichiers ou que tu t'envoies par e-mail ou WhatsApp. Dernière sauvegarde : ${last}.</p>
-    <button class="btn primary" data-a="backup" style="width:100%">Sauvegarder mes heures</button>
+  ${cloudCardHTML()}<div class="card"><h4>Copie dans un fichier</h4><p>Un fichier de secours à garder où tu veux, par exemple dans Fichiers. Dernière copie : ${last}.</p>
+    <button class="btn line" data-a="backup">Créer une copie</button>
     <button class="btn line" data-a="restore">Retrouver mes heures</button>
     <button class="btn line" data-a="csv">Exporter en tableau (CSV)</button>
     <input type="file" id="file" hidden></div>
   ${standalone?'':`<div class="card"><h4>Installer sur l'écran d'accueil</h4><p>Touche le bouton ci-dessous. Sur Android, l'installation se lance directement. Sur iPhone et iPad, Apple impose un dernier geste : choisis « Sur l'écran d'accueil » dans le menu qui s'ouvre. L'app marche ensuite sans réseau.</p><button class="btn primary" data-a="install" style="width:100%;margin-top:12px">Installer l'app</button></div>`}
   <div class="card"><h4>Effacer</h4><p>Supprime toutes les heures de cet appareil. Fais une copie avant.</p>
-    <button class="btn quiet" data-a="wipe">Effacer toutes les données</button></div>`;
+    <button class="btn quiet" data-a="wipe">Effacer toutes les données</button></div>
+  <p class="ver">Suivi des heures · version ${APP_VERSION}</p>`;
   $('#actions').innerHTML='';
   $('#file').onchange=restoreFile;
 }
 
 /* ---------- navigation ---------- */
 function renderTabs(){
-  $('#tabs').innerHTML=[['day','Jour',I.day],['month','Aperçu',I.cal]]
+  $('#tabs').innerHTML=[['home','Accueil',I.home],['day','Jour',I.day],['month','Aperçu',I.cal]]
     .map(([k,l,i])=>`<button class="tab" role="tab" data-tab="${k}" aria-selected="${tab===k}">${i}${l}</button>`).join('')
-    +`<button class="tab" data-a="backup">${I.save}Sauvegarder</button>`;
+    +`<button class="tab" data-a="v15-sync">${I.save}Sauvegarder</button>`;
 }
 function render(){
-  if(tab==='day')renderDay();else if(tab==='month')renderMonth();else renderSettings();
+  document.body.classList.toggle('onb',needOnboarding());
+  if(needOnboarding())renderOnboarding();else if(tab==='home')renderHome();else if(tab==='day')renderDay();else if(tab==='month')renderMonth();else renderSettings();
   renderTabs();
   requestAnimationFrame(()=>document.documentElement.style.setProperty('--dock',$('#dock').offsetHeight+'px'));
   window.scrollTo(0,0);
@@ -1125,7 +1162,7 @@ function restoreFile(ev){
       d=m?JSON.parse(b64dec(m[1].replace(/\s+/g,''))):JSON.parse(txt);
       if(!d||!Array.isArray(d.entries))throw 0;
       ask('Retrouver ces heures ?',`${d.entries.length} plages seront chargées et remplaceront les heures de cet appareil.`,'Retrouver',()=>{
-        db={entries:d.entries,days:d.days||{},settings:Object.assign(db.settings,d.settings||{})};save();applyTheme();closeSheet();render();toast('Heures retrouvées')});
+        db={entries:d.entries,days:d.days||{},settings:Object.assign(db.settings,d.settings||{}),meta:db.meta};save();applyTheme();closeSheet();render();toast('Heures retrouvées')});
     }catch(e){toast("Ce fichier n'est pas une sauvegarde de l'app")}
   };r.readAsText(f);ev.target.value='';
 }
@@ -1154,6 +1191,353 @@ function padKey(k){
   padDraw();
 }
 $('#padscrim').onclick=closePad;
+
+/* ====================== v15 : compte Microsoft, sauvegarde OneDrive, accueil ====================== */
+const APP_VERSION='15';
+const MS={
+  clientId:'bdbc996a-56d1-4321-9483-f1d03a8cff45',
+  authz:'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
+  token:'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+  graph:'https://graph.microsoft.com/v1.0',
+  scope:'openid profile offline_access User.Read Files.ReadWrite.AppFolder',
+  file:'suivi-heures.json',prev:'suivi-heures-avant.json'
+};
+const MSKEY='suivi-heures-ms',MSPEND='suivi-heures-ms-pending';
+const MSLOGO='<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="2" width="9.5" height="9.5" fill="#F25022" stroke="none"/><rect x="12.5" y="2" width="9.5" height="9.5" fill="#7FBA00" stroke="none"/><rect x="2" y="12.5" width="9.5" height="9.5" fill="#00A4EF" stroke="none"/><rect x="12.5" y="12.5" width="9.5" height="9.5" fill="#FFB900" stroke="none"/></svg>';
+I.home='<svg viewBox="0 0 24 24"><path d="M4 11l8-6.5L20 11v8.5a1 1 0 01-1 1h-4.5v-6h-5v6H5a1 1 0 01-1-1z"/></svg>';
+const msRedirect=()=>location.origin+location.pathname.replace(/index\.html$/,'');
+function msGet(){try{return JSON.parse(localStorage.getItem(MSKEY)||'null')}catch(e){return null}}
+function msSet(o){try{if(o)localStorage.setItem(MSKEY,JSON.stringify(o));else localStorage.removeItem(MSKEY)}catch(e){}}
+const cloudOn=()=>!!msGet();
+const CL={state:msGet()?'ok':'off',msg:'',busy:false,timer:null,again:false};
+const ob={step:1};
+const needOnboarding=()=>!db.settings.onboarded;
+
+/* ---------- connexion (OAuth2 code + PKCE, sans bibliothèque) ---------- */
+const b64u=buf=>btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+async function msLogin(){
+  const v=b64u(crypto.getRandomValues(new Uint8Array(32)));
+  const c=b64u(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v)));
+  const st=b64u(crypto.getRandomValues(new Uint8Array(12)));
+  try{localStorage.setItem(MSPEND,JSON.stringify({v,st,t:Date.now()}))}catch(e){}
+  const a=msGet();
+  const p=new URLSearchParams({client_id:MS.clientId,response_type:'code',redirect_uri:msRedirect(),response_mode:'query',scope:MS.scope,state:st,code_challenge:c,code_challenge_method:'S256'});
+  if(a&&a.email)p.set('login_hint',a.email);else p.set('prompt','select_account');
+  location.href=MS.authz+'?'+p;
+}
+function friendlyAuth(code,desc){
+  const s=(code||'')+' '+(desc||''),num=(s.match(/AADSTS\d+/)||[])[0];
+  if(/AADSTS(90094|65001|650056|650051|900941|90093|165900)|admin|consent_required/i.test(s))return "Ton organisation doit d'abord autoriser l'app (accord d'un administrateur)."+(num?' Code : '+num+'.':'');
+  if(/AADSTS65004|access_denied/i.test(s))return "Tu as refusé l'accès. Recommence et accepte pour activer la sauvegarde.";
+  return 'Connexion impossible : '+String(desc||code).split('\n')[0].slice(0,160);
+}
+async function msTokenPost(extra){
+  const body=new URLSearchParams(Object.assign({client_id:MS.clientId,scope:MS.scope},extra));
+  const r=await fetch(MS.token,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){const e=new Error(j.error_description||j.error||('HTTP '+r.status));e.code=j.error||'';e.desc=j.error_description||'';throw e}
+  const old=msGet()||{};let idc={};
+  try{idc=JSON.parse(decodeURIComponent(escape(atob(j.id_token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')))))}catch(e){}
+  const o={at:j.access_token,rt:j.refresh_token||old.rt,exp:Date.now()+(j.expires_in||3600)*1000-60000,name:idc.name||old.name||'',email:idc.preferred_username||idc.email||old.email||'',tid:idc.tid||old.tid||''};
+  msSet(o);return o;
+}
+async function msReturn(){
+  const q=new URLSearchParams(location.search);
+  if(!q.has('code')&&!q.has('error'))return false;
+  let pend=null;try{pend=JSON.parse(localStorage.getItem(MSPEND)||'null')}catch(e){}
+  try{localStorage.removeItem(MSPEND)}catch(e){}
+  history.replaceState(null,'',location.pathname+location.hash);
+  if(q.has('error')){cloudSet('error',friendlyAuth(q.get('error'),q.get('error_description')));return 'err'}
+  if(!pend||pend.st!==q.get('state')){cloudSet('error','Le retour de connexion est invalide. Recommence.');return 'err'}
+  try{await msTokenPost({grant_type:'authorization_code',code:q.get('code'),redirect_uri:msRedirect(),code_verifier:pend.v});return 'ok'}
+  catch(e){cloudSet('error',e instanceof TypeError?'Pas de réseau pour finir la connexion. Recommence.':friendlyAuth(e.code,e.desc||e.message));return 'err'}
+}
+async function msAccess(){
+  const a=msGet();
+  if(!a)throw Object.assign(new Error('off'),{code:'off'});
+  if(a.at&&Date.now()<a.exp)return a.at;
+  if(!a.rt)throw Object.assign(new Error('reauth'),{code:'reauth'});
+  try{return (await msTokenPost({grant_type:'refresh_token',refresh_token:a.rt})).at}
+  catch(e){
+    if(e instanceof TypeError)throw e;
+    if(/invalid_grant|interaction_required|consent_required|login_required/.test(e.code||''))throw Object.assign(e,{code:'reauth'});
+    throw e;
+  }
+}
+
+/* ---------- OneDrive : dossier d'application ---------- */
+async function gx(path,opt){
+  const t=await msAccess();opt=opt||{};
+  opt.headers=Object.assign({Authorization:'Bearer '+t},opt.headers||{});
+  const r=await fetch(path.startsWith('http')?path:MS.graph+path,opt);
+  if(r.status===401)throw Object.assign(new Error('reauth'),{code:'reauth'});
+  return r;
+}
+async function gerr(r){let m='';try{const j=await r.json();m=(j.error&&j.error.message)||''}catch(e){}const e=new Error(m||('Erreur OneDrive '+r.status));e.status=r.status;e.code='http'+r.status;return e}
+const FILE_PATH='/me/drive/special/approot:/'+MS.file;
+async function remoteMeta(){const r=await gx(FILE_PATH+'?select=id,eTag,lastModifiedDateTime');if(r.status===404)return null;if(!r.ok)throw await gerr(r);return r.json()}
+async function remoteRead(){const r=await gx(FILE_PATH+':/content');if(!r.ok)throw await gerr(r);return r.json()}
+async function remoteWrite(obj,etag,name){
+  const r=await gx('/me/drive/special/approot:/'+(name||MS.file)+':/content',{method:'PUT',headers:Object.assign({'Content-Type':'application/json'},etag?{'If-Match':etag}:{}),body:JSON.stringify(obj)});
+  if(r.status===412)throw Object.assign(new Error('etag'),{code:'etag'});
+  if(!r.ok)throw await gerr(r);
+  return r.json();
+}
+const payload=()=>{const o=JSON.parse(JSON.stringify(db));delete o.meta;return Object.assign({v:2,app:'suivi-heures',saved:new Date().toISOString()},o)};
+
+/* ---------- synchronisation ---------- */
+function cloudSet(state,msg){CL.state=state;CL.msg=msg||'';cloudPaint()}
+function cloudChanged(){
+  if(!cloudOn())return;
+  clearTimeout(CL.timer);CL.timer=setTimeout(()=>syncNow(),2500);
+  if(CL.state!=='choice'&&CL.state!=='reauth')cloudSet('syncing');
+}
+function handleErr(e){
+  if(e&&e.code==='reauth')cloudSet('reauth');
+  else if(e instanceof TypeError)cloudSet('pending');
+  else cloudSet('error',e&&e.message?String(e.message).slice(0,200):'Erreur inconnue');
+}
+async function syncNow(manual){
+  if(!cloudOn())return;
+  if(CL.state==='choice'&&!manual)return;
+  if(CL.busy){CL.again=true;return}
+  if(!navigator.onLine){cloudSet('pending');return}
+  CL.busy=true;cloudSet('syncing');
+  try{await syncCore(manual)}catch(e){handleErr(e)}
+  CL.busy=false;
+  if(CL.again){CL.again=false;setTimeout(()=>syncNow(),300)}
+}
+function markSynced(mod,etag,msg,manual){
+  db.meta.synced=Math.max(mod,db.meta.synced||0);db.meta.etag=etag||'';db.meta.at=Date.now();delete db.meta.wipe;persist();
+  cloudSet('ok');
+  if(msg)toast(msg);else if(manual)toast('Sauvegardé dans OneDrive');
+}
+const sameData=rd=>JSON.stringify(rd.entries||[])===JSON.stringify(db.entries)&&JSON.stringify(rd.days||{})===JSON.stringify(db.days);
+async function keepPrevious(){try{const rd=await remoteRead();await remoteWrite(rd,null,MS.prev)}catch(e){}}
+async function syncCore(manual){
+  const m=db.meta,mod=m.modified,dirty=mod>(m.synced||0),empty=!db.entries.length;
+  const rm=await remoteMeta();
+  if(!rm){
+    if(!empty||m.wipe){const it=await remoteWrite(payload());return markSynced(mod,it.eTag,'',manual)}
+    return markSynced(mod,'','',manual);
+  }
+  if(rm.eTag===m.etag){
+    if(!dirty)return markSynced(mod,rm.eTag,'',manual);
+    if(empty&&!m.wipe)return askConflict(await remoteRead(),rm.eTag,'empty');
+    if(m.wipe)await keepPrevious();
+    try{const it=await remoteWrite(payload(),rm.eTag);return markSynced(mod,it.eTag,'',manual)}
+    catch(e){if(e.code==='etag')return syncCore(manual);throw e}
+  }
+  const rd=await remoteRead(),remoteHas=Array.isArray(rd.entries)&&rd.entries.length>0;
+  if(m.etag&&!dirty)return adopt(rd,rm.eTag,'Heures mises à jour depuis OneDrive');
+  if(empty&&!m.wipe&&remoteHas)return adopt(rd,rm.eTag,'Heures retrouvées depuis OneDrive');
+  if(remoteHas&&sameData(rd))return markSynced(mod,rm.eTag,'',manual);
+  if(!remoteHas||m.wipe){
+    if(m.wipe)await keepPrevious();
+    try{const it=await remoteWrite(payload(),rm.eTag);return markSynced(mod,it.eTag,'',manual)}
+    catch(e){if(e.code==='etag')return syncCore(manual);throw e}
+  }
+  return askConflict(rd,rm.eTag,'both');
+}
+function adopt(rd,etag,msg){
+  try{localStorage.setItem('suivi-heures-avant-adopt',JSON.stringify(db))}catch(e){}
+  const k=db.settings,rs=rd.settings||{};
+  db.entries=Array.isArray(rd.entries)?rd.entries:[];db.days=rd.days||{};
+  db.settings=Object.assign({},rs,{theme:k.theme,installSnooze:k.installSnooze,backupSnooze:k.backupSnooze,cloudSnooze:k.cloudSnooze,lastBackup:k.lastBackup,onboarded:k.onboarded||rs.onboarded});
+  db.settings=Object.assign({theme:'auto',fullDay:492,lastBackup:null},db.settings);
+  db.settings.profile=Object.assign({nom:'',prenom:'',division:''},rs.profile||{});
+  db.settings.tpl=Object.assign({m1:'07:00',m2:'12:00',a1:'13:00',a2:'16:12'},rs.tpl||{});
+  for(const e of db.entries)if(!e.blk)e.blk=e.type==='pause'?'pause':e.type==='abs'?'abs':(toMin(e.start)<720?'matin':'apres');
+  const now=Date.now();db.meta.modified=now;db.meta.synced=now;db.meta.etag=etag;db.meta.at=now;delete db.meta.wipe;
+  persist();applyTheme();cloudSet('ok');render();
+  if(msg)toast(msg);
+}
+
+/* ---------- choix en cas de différence ---------- */
+function askConflict(rd,etag,kind){
+  window._cf={rd,etag,kind};cloudSet('choice');openConflict();
+}
+function openConflict(){
+  const c=window._cf;if(!c)return;
+  const n=Array.isArray(c.rd.entries)?c.rd.entries.length:0,pl=k=>k+(k>1?' plages':' plage');
+  const body=c.kind==='empty'
+    ?`<p style="color:var(--muted);line-height:1.5;margin:0">Cet appareil n'a plus d'heures, mais ton OneDrive en contient ${n}. Que veux-tu faire ?</p>`
+    :`<p style="color:var(--muted);line-height:1.5;margin:0">Cet appareil et ton OneDrive ont chacun des heures différentes (${pl(db.entries.length)} ici, ${pl(n)} sur OneDrive). Choisis comment continuer.</p>`;
+  const btns=c.kind==='empty'
+    ?`<button class="btn primary" data-a="v15-cf" data-c="remote">Retrouver les heures de OneDrive</button><button class="btn line" data-a="v15-cf" data-c="wipe">Effacer aussi OneDrive</button>`
+    :`<button class="btn primary" data-a="v15-cf" data-c="merge">Fusionner les deux</button><button class="btn line" data-a="v15-cf" data-c="remote">Garder celles de OneDrive</button><button class="btn line" data-a="v15-cf" data-c="local">Garder celles de cet appareil</button>`;
+  openSheet(`<h2>Quelle version garder ?</h2><div class="sbody">${body}<div style="display:grid;gap:10px;margin-top:16px">${btns}</div><p style="color:var(--muted);font-size:13px;margin:14px 0 0">Une copie de l'autre version est gardée en secours.</p></div>`);
+}
+async function resolveConflict(choice){
+  const c=window._cf;if(!c)return;
+  window._cf=null;closeSheet();
+  try{
+    if(choice==='remote'){adopt(c.rd,c.etag,'Heures de OneDrive reprises');return}
+    try{localStorage.setItem('suivi-heures-avant-choix',JSON.stringify(db))}catch(e){}
+    if(choice==='merge'){
+      const have=new Set(db.entries.map(e=>e.id));
+      for(const e of (c.rd.entries||[]))if(!have.has(e.id))db.entries.push(e);
+      db.days=Object.assign({},c.rd.days||{},db.days);
+    }
+    if(choice==='local'||choice==='wipe')await keepPrevious();
+    if(choice==='wipe'){db.entries=[];db.days={};db.meta.wipe=true}
+    db.meta.etag=c.etag;db.meta.modified=Date.now();persist();
+    cloudSet('syncing');render();
+    CL.busy=false;await syncNow(true);
+  }catch(e){handleErr(e)}
+}
+
+/* ---------- état affiché ---------- */
+function chipText(){
+  const s=CL.state;
+  if(s==='off')return 'Sauvegarde OneDrive désactivée';
+  if(s==='syncing')return 'Sauvegarde en cours…';
+  if(s==='pending')return 'En attente de réseau';
+  if(s==='reauth')return 'Reconnexion nécessaire';
+  if(s==='choice')return 'Un choix est nécessaire';
+  if(s==='error')return 'Sauvegarde en échec';
+  const at=db.meta&&db.meta.at?new Date(db.meta.at):null;
+  if(!at)return 'Sauvegardé dans OneDrive';
+  const same=ymd(at)===ymd(new Date());
+  return 'Sauvegardé '+(same?'à ':'le '+dfmt(at,{day:'numeric',month:'short'})+' à ')+pad(at.getHours())+':'+pad(at.getMinutes());
+}
+const cloudChipHTML=()=>`<div class="cloudchip" role="status" data-s="${CL.state}"><i></i><span>${esc(chipText())}</span></div>`;
+let _lastRem='';
+function cloudPaint(){
+  document.querySelectorAll('.cloudchip').forEach(el=>{el.dataset.s=CL.state;el.lastChild.textContent=chipText()});
+  const key=CL.state+'|'+(window._upd?1:0);
+  const typing=document.activeElement&&document.activeElement.tagName==='INPUT',sheet=$('#sheet').classList.contains('on');
+  if(typing||sheet)return;
+  if(key!==_lastRem){_lastRem=key;if(tab==='home'&&!needOnboarding())render()}
+  else if(needOnboarding()&&(CL.state==='error'||CL.state==='ok'))render();
+}
+function remindersHTML(){
+  const nb=(t,s,b)=>`<div class="note col"><span><b>${t}</b>${s?`<br><small>${s}</small>`:''}</span><div class="chips">${b}</div></div>`;
+  const pb=(a,l)=>`<button class="btn primary" data-a="${a}" style="min-height:48px;padding:0 20px">${l}</button>`;
+  let h='';
+  if(CL.state==='reauth')h+=nb('Reconnecte-toi pour reprendre la sauvegarde',"Ta session Microsoft a expiré. Tes heures sont gardées sur l'appareil.",pb('v15-login','Se reconnecter'));
+  if(CL.state==='error')h+=nb('La sauvegarde OneDrive n\'a pas abouti',esc(CL.msg||''),pb('v15-retry','Réessayer'));
+  if(CL.state==='choice')h+=nb('Un choix est nécessaire','Cet appareil et OneDrive ne contiennent pas les mêmes heures.',pb('v15-cfopen','Choisir'));
+  if(CL.state==='pending'&&db.meta.modified-(db.meta.synced||0)>864e5)h+=nb('Sauvegarde en attente depuis plus d\'un jour','Connecte-toi au réseau pour la terminer.',pb('v15-retry','Réessayer'));
+  if(window._upd)h+=nb('Une nouvelle version est prête','Recharge l\'app pour en profiter.',pb('v15-reload','Mettre à jour'));
+  h+=missingHTML();
+  const ih=installHTML();h+=ih;
+  if(!ih&&CL.state==='off'&&!cloudOn()&&Date.now()>(db.settings.cloudSnooze||0))h+=nb('Active la sauvegarde automatique','Une copie de tes heures dans ton OneDrive, sans rien faire.',pb('v15-login','Se connecter')+'<button class="link" data-a="v15-later">Plus tard</button>');
+  return h;
+}
+
+/* ---------- accueil ---------- */
+const DAYP=['Voie libre pour cette journée.','Un bon départ, et tout roule.',"À l'heure, comme sur la ligne.",'Chaque détail compte, comme un bon aiguillage.','Prochain arrêt : une belle journée.','La sécurité d\'abord, le café juste après.','Un pas après l\'autre, un rail après l\'autre.','Bonne journée sur la bonne voie.','Tout est au vert, ou presque.','Fermeture des portes, direction une bonne journée.','Le réseau tient grâce à ceux qui le suivent de près.','Pas de retard au programme.','Un bon réglage, et le reste suit.','Solide comme un rail, ponctuel comme l\'horloge de gare.'];
+const EVEP=['Terminus : tout le monde descend. Bonne soirée !','Fin de service. Tu as bien roulé.','Voie libre pour la soirée.','Journée bouclée, direction le repos.','Les signaux sont au vert pour la soirée.','Bonne soirée, la ligne est libre.','Dernier arrêt de la journée : le canapé.'];
+const WKP=['Week-end : respire un peu, sauf si tu es de piquet.','Le réseau tourne, toi tu peux ralentir.','Samedi ou dimanche, la ligne reste ouverte. Prends soin de toi.'];
+function phrase(d,ev){
+  const wd=d.getDay(),hr=d.getHours();
+  const doy=Math.floor((new Date(d.getFullYear(),d.getMonth(),d.getDate())-new Date(d.getFullYear(),0,0))/864e5);
+  if((wd===0||wd===6)&&!ev)return WKP[doy%WKP.length];
+  if(wd===1&&hr<12)return 'Nouvelle semaine, voie libre.';
+  if(wd===5&&hr>=12&&!ev)return 'Dernière ligne droite avant le week-end.';
+  const P=ev?EVEP:DAYP;return P[doy%P.length];
+}
+function homeTotals(){
+  const now=new Date(),w=weekBars(now),y=now.getFullYear(),mo=now.getMonth(),n=new Date(y,mo+1,0).getDate();let mw=0;
+  for(let i=1;i<=n;i++)mw+=totals(dayEntries(ymd(new Date(y,mo,i)))).work;
+  return {week:w.tot,wk:w.wk,month:mw,monthName:cap(dfmt(now,{month:'long'}))};
+}
+function renderHome(){
+  const pf=db.settings.profile,now=new Date(),hr=now.getHours(),ev=hr>=18||hr<4,T=homeTotals(),today=ymd(now);
+  const hm=m=>`${Math.floor(m/60)}<span>h</span>${pad(m%60)}`;
+  _lastRem=CL.state+'|'+(window._upd?1:0);
+  $('#app').innerHTML=`<div class="top hometop"><div class="hello"><h1>${ev?'Bonsoir':'Bonjour'}${pf.prenom?', '+esc(pf.prenom):''}</h1><p>${esc(phrase(now,ev))}</p></div><button class="pod" data-a="settings" aria-label="Réglages">${I.set}</button></div>
+  ${remindersHTML()}
+  <div class="bento"><section class="bn hm" style="--i:0"><div class="k"><i></i>Cette semaine</div><div class="num">${hm(T.week)}</div><div class="sub2">Semaine ${T.wk}</div></section>
+  <section class="bn hm" style="--i:1"><div class="k"><i></i>Ce mois</div><div class="num">${hm(T.month)}</div><div class="sub2">${esc(T.monthName)}</div></section></div>
+  ${cloudChipHTML()}`;
+  $('#actions').innerHTML=`<button class="btn primary wide" data-go="${today}">${I.plus} ${hasDay(today)?"Voir aujourd'hui":"Noter aujourd'hui"}</button>`;
+}
+
+/* ---------- premier lancement ---------- */
+function renderOnboarding(){
+  document.body.classList.add('onb');
+  const on=cloudOn(),step=(on||ob.step===2)?2:1,pf=db.settings.profile;
+  let h='';
+  if(step===1){
+    const returning=window._returning;
+    h=`<div class="ob"><h1>Suivi des heures</h1><p class="lead">Note tes heures en quelques gestes, et garde-les en lieu sûr.</p>
+    <ul><li><b>Sur ton téléphone</b>Tes heures restent sur ton appareil. Aucun serveur de l'app ne les voit.</li>
+    <li><b>Dans ton OneDrive</b>Une copie automatique dans ton propre compte Microsoft, dans un dossier réservé à l'app.</li></ul>
+    ${CL.state==='error'?`<div class="err">${esc(CL.msg)}</div>`:''}
+    ${returning?`<p class="lead">Connexion en cours…</p>`:`<button class="btn primary ms" data-a="v15-login">${MSLOGO} Se connecter avec Microsoft</button><button class="link" data-a="v15-skip">Continuer sans OneDrive</button>`}</div>`;
+  }else{
+    h=`<div class="ob"><h1>Ton profil</h1><p class="lead">${on?'Repris de ton compte Microsoft. Tu peux corriger.':'Ces infos servent au récapitulatif de ton mois.'}</p>
+    <div><label class="f" style="margin-top:0">Prénom</label><input class="txt" data-pf="prenom" autocomplete="given-name" value="${esc(pf.prenom)}">
+    <label class="f">Nom</label><input class="txt" data-pf="nom" autocomplete="family-name" value="${esc(pf.nom)}">
+    <label class="f">Division</label><input class="txt" data-pf="division" autocomplete="off" value="${esc(pf.division)}"></div>
+    ${CL.state==='error'?`<div class="err">${esc(CL.msg)}</div>`:''}
+    ${on?`<div>${cloudChipHTML()}</div>`:''}
+    <button class="btn primary" data-a="v15-start" id="obgo" ${pf.prenom?'':'disabled'}>Commencer</button></div>`;
+  }
+  $('#app').innerHTML=h;$('#actions').innerHTML='';
+}
+
+/* ---------- réglages : carte OneDrive ---------- */
+function cloudCardHTML(){
+  const a=msGet();
+  if(!a)return `<div class="card"><h4>Sauvegarde OneDrive</h4><p>Tes heures sont copiées automatiquement dans ton propre OneDrive, dans un dossier réservé à l'app. Aucun autre serveur n'est utilisé.</p>${cloudChipHTML()}<button class="btn primary" data-a="v15-login">Se connecter avec Microsoft</button></div>`;
+  return `<div class="card"><h4>Sauvegarde OneDrive</h4><p>Compte : ${esc(a.email||a.name||'Microsoft')}</p>${cloudChipHTML()}${CL.state==='error'&&CL.msg?`<p>${esc(CL.msg)}</p>`:''}<button class="btn line" data-a="v15-sync">Sauvegarder maintenant</button><button class="btn quiet" data-a="v15-logout">Se déconnecter</button></div>`;
+}
+function wipeAsk(){
+  const on=cloudOn();
+  ask('Tout effacer ?',on?'Toutes les heures seront supprimées de cet appareil et de ton OneDrive. Une copie créée dans un fichier reste utilisable.':'Toutes les heures de cet appareil seront supprimées. Une copie sauvegardée reste utilisable.','Effacer',()=>{
+    db={entries:[],days:{},settings:db.settings,meta:db.meta};db.meta.wipe=on;save();closeSheet();render();toast('Données effacées')});
+}
+function openConnectSheet(){
+  openSheet(`<h2>Sauvegarder mes heures</h2><div class="sbody"><p style="color:var(--muted);line-height:1.5;margin:0">Connecte ton compte Microsoft : tes heures seront copiées automatiquement dans ton OneDrive.</p><div style="display:grid;gap:10px;margin-top:16px"><button class="btn primary ms" data-a="v15-login">${MSLOGO} Se connecter avec Microsoft</button><button class="btn line" data-a="backup">Créer une copie dans un fichier</button></div></div>`);
+}
+
+/* ---------- actions ---------- */
+document.addEventListener('click',e=>{
+  const t=e.target.closest('[data-a^="v15-"]');if(!t)return;
+  switch(t.dataset.a){
+    case 'v15-login':msLogin();break;
+    case 'v15-skip':ob.step=2;render();break;
+    case 'v15-start':db.settings.onboarded=true;save();document.body.classList.remove('onb');tab='home';render();break;
+    case 'v15-retry':syncNow(true);break;
+    case 'v15-sync':if(cloudOn())syncNow(true);else openConnectSheet();break;
+    case 'v15-reload':location.reload();break;
+    case 'v15-later':db.settings.cloudSnooze=Date.now()+7*864e5;persist();render();break;
+    case 'v15-cfopen':openConflict();break;
+    case 'v15-cf':resolveConflict(t.dataset.c);break;
+    case 'v15-logout':ask('Se déconnecter ?',"Ta sauvegarde reste dans ton OneDrive et tes heures restent sur cet appareil. La sauvegarde automatique s'arrête.",'Se déconnecter',()=>{msSet(null);db.meta.etag='';persist();closeSheet();cloudSet('off');render();toast('Déconnecté')});break;
+  }
+});
+document.addEventListener('input',e=>{
+  const t=e.target;
+  if(t.dataset&&t.dataset.pf&&needOnboarding()){const b=$('#obgo'),p=document.querySelector('[data-pf=prenom]');if(b&&p)b.disabled=!p.value.trim()}
+});
+
+/* ---------- démarrage ---------- */
+async function cloudStart(){
+  const back=await msReturn();
+  if(back==='ok'){
+    cloudSet('syncing');
+    try{
+      const r=await gx('/me?$select=givenName,surname,displayName,department');
+      if(r.ok){const p=await r.json(),pf=db.settings.profile;
+        if(!pf.prenom)pf.prenom=p.givenName||(p.displayName||'').split(' ')[0]||'';
+        if(!pf.nom)pf.nom=p.surname||'';
+        if(!pf.division)pf.division=p.department||'';
+        persist()}
+    }catch(e){}
+    window._returning=false;
+    await syncNow(false);
+    if(!db.settings.onboarded)ob.step=2;
+    render();
+  }else if(back==='err'){window._returning=false;render()}
+  else if(cloudOn()){syncNow()}
+  addEventListener('online',()=>syncNow());
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')syncNow()});
+}
+window._returning=/[?&](code|error)=/.test(location.search);
 
 /* ---------- événements ---------- */
 document.addEventListener('click',e=>{
@@ -1209,7 +1593,7 @@ document.addEventListener('click',e=>{
     case 'csv':csv();break;
     case 'restore':$('#file').click();break;
     case 'install':{if(_ip){_ip.prompt();_ip=null}else if(navigator.share){navigator.share({title:'Suivi des heures',url:location.href.split('#')[0]}).catch(()=>{});toast("Choisis « Sur l'écran d'accueil »")}else toast("Utilise le menu du navigateur : Ajouter à l'écran d'accueil");break}
-    case 'wipe':ask('Tout effacer ?','Toutes les heures de cet appareil seront supprimées. Une copie sauvegardée reste utilisable.','Effacer',()=>{db={entries:[],days:{},settings:db.settings};save();closeSheet();render();toast('Données effacées')});break;
+    case 'wipe':wipeAsk();break;
   }
 });
 document.addEventListener('change',e=>{
@@ -1232,7 +1616,8 @@ document.addEventListener('keydown',e=>{
 matchMedia('(prefers-color-scheme: dark)').addEventListener&&matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{if(db.settings.theme==='auto'){applyTheme();render()}});
 
 applyTheme();render();
-if('serviceWorker' in navigator&&location.protocol.startsWith('http')){navigator.serviceWorker.register('sw.js').catch(()=>{})}
+cloudStart();
+if('serviceWorker' in navigator&&location.protocol.startsWith('http')){const hadCtl=!!navigator.serviceWorker.controller;navigator.serviceWorker.register('sw.js').catch(()=>{});navigator.serviceWorker.addEventListener('controllerchange',()=>{if(hadCtl){window._upd=true;cloudPaint();if(tab==='home'&&!needOnboarding())render()}})}
 </script>
 </body>
 </html>
